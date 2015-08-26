@@ -1,6 +1,6 @@
 # Natrium - Browser
 
-[libsodium](https://github.com/jedisct1/libsodium.js) wrapped with [natrium](https://github.com/wilhelmmatilainen/natrium) api
+[libsodium.js](https://github.com/jedisct1/libsodium.js) wrapped with [natrium](https://github.com/wilhelmmatilainen/natrium) api
 
 ***This module must have exactly the same behaviour as [natrium](https://github.com/wilhelmmatilainen/natrium)***
 
