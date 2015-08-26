@@ -1,0 +1,56 @@
+{
+  "name": "natrium-browser",
+  "version": "0.0.1",
+  "description": "libsodium.js wrapped with natrium api",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --compilers js:babel/register",
+    "babel": "babel natrium.js -o index.js",
+    "postinstall": "npm run build",
+    "prepublish": "npm run babel",
+    "push": "npm run babel && git add . && git commit && git push"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wilhelmmatilainen/natrium-browser.git"
+  },
+  "author": "Wilhelm Matilainen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wilhelmmatilainen/natrium-browser/issues"
+  },
+  "homepage": "https://github.com/wilhelmmatilainen/natrium-browser#readme",
+  "keywords": [
+    "sodium",
+    "libsodium",
+    "nacl",
+    "curve25519",
+    "chacha20",
+    "salsa20",
+    "xsalsa20",
+    "poly1305",
+    "blake2",
+    "crypt",
+    "crypto",
+    "encrypt",
+    "encryption",
+    "decrypt",
+    "decryption",
+    "sign",
+    "signature",
+    "verify",
+    "secure",
+    "security",
+    "native",
+    "browser"
+  ],
+  "dependencies": {
+    "libsodium-wrappers": "^0.2.9"
+  },
+  "devDependencies": {
+    "babel": "^5.8.21",
+    "chai": "^3.2.0",
+    "debug": "^2.2.0",
+    "mocha": "^2.2.5"
+  }
+}
