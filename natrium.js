@@ -31,16 +31,20 @@ export class Natrium {
 	}
 
 	sign_keypair(seed) {
-		if(!Buffer.isBuffer(seed) || seed.length != this.size.sign_seed)
+		if(!seed instanceof Uint8Array || seed.length != this.size.sign_seed)
 			return Promise.reject(new Error('seed should be a Buffer of size ' + this.size.sign_seed));
 
-		return new Promise(function(success, fail) {
-			sodium.sign_keypair(seed, function (error, pk, sk) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success({public: pk, secret: sk, seed});
-			});
+		return new Promise(function(success, fail) {
+			let keypair = sodium.crypto_sign_seed_keypair(seed);
+			keypair = {secret: keypair.privateKey, public: keypair.publicKey, seed};
+
+			if(keypair.secret instanceof Uint8Array && keypair.public instanceof Uint8Array)
+				if(keypair.secret.length === me.size.sign_secret && keypair.public.length === me.size.sign_public)
+					return success(keypair);
+
+			return fail(new Error('Sign keypair generation failed', keypair));
 		});
 	}
 
@@ -49,152 +53,189 @@ export class Natrium {
 	}
 
 	sign(secret, message) {
-		if(!Buffer.isBuffer(secret) || secret.length != this.size.sign_secret)
+		if(!secret instanceof Uint8Array || secret.length != this.size.sign_secret)
 			return Promise.reject(new Error('secret should be a Buffer of size ' + this.size.sign_secret));
 
-		if(!Buffer.isBuffer(message) || message.length === 0)
+		if(!message instanceof Uint8Array || message.length === 0)
 			return Promise.reject(new Error('message should be a Buffer of a size greater than 0'));
 
-		return new Promise(function(success, fail) {
-			sodium.sign(secret, message, function (error, signature) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(signature);
-			});
+		return new Promise(function(success, fail) {
+			let signature = sodium.crypto_sign_detached(message, secret);
+
+			if(signature instanceof Uint8Array && signature.length === me.size.signature)
+				return success(signature);
+
+			return fail(new Error('Signature generation failed', signature));
 		});
 	}
 
 	verify(pk, signature, message) {
-		if(!Buffer.isBuffer(pk) || pk.length != this.size.sign_public)
+		if(!pk instanceof Uint8Array || pk.length != this.size.sign_public)
 			return Promise.reject(new Error('public key should be a Buffer of size ' + this.size.sign_public));
 
-		if(!Buffer.isBuffer(signature) || signature.length === 0)
+		if(!signature instanceof Uint8Array || signature.length === 0)
 			return Promise.reject(new Error('signature should be a Buffer of a size greater than 0'));
 
-		if(!Buffer.isBuffer(message) || message.length === 0)
+		if(!message instanceof Uint8Array || message.length === 0)
 			return Promise.reject(new Error('message should be a Buffer of a size greater than 0'));
 
 		return new Promise(function(success, fail) {
-			sodium.verify(pk, signature, message, function (error) {
-				if(error)
-					return fail(error);
+			let verified = sodium.crypto_sign_verify_detached(signature, message, pk);
 
-				success();
-			});
+			if(verified)
+				return success();
+
+			return fail(new Error('Verification failed'));
 		});
 	}
 
 	box_keypair() {
-		return new Promise(function(success, fail) {
-			sodium.box_keypair(function (error, pk, sk) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success({public: pk, secret: sk});
-			});
+		return new Promise(function(success, fail) {
+			let keypair = sodium.crypto_box_keypair();
+			keypair = {secret: keypair.privateKey, public: keypair.publicKey};
+
+			if(keypair.secret instanceof Uint8Array && keypair.public instanceof Uint8Array)
+				if(keypair.secret.length === me.size.box_secret && keypair.public.length === me.size.box_public)
+					return success(keypair);
+
+			return fail(new Error('Box keypair generation failed', keypair));
 		});
 	}
 
 	// secret is own secret key
 	// pk is the someone else's public key
 	box_key(secret, pk) {
-		if(!Buffer.isBuffer(pk) || pk.length != this.size.box_public)
+		if(!pk instanceof Uint8Array || pk.length != this.size.box_public)
 			return Promise.reject(new Error('public key should be a Buffer of size ' + this.size.box_public));
 
-		if(!Buffer.isBuffer(secret) || secret.length != this.size.box_secret)
+		if(!secret instanceof Uint8Array || secret.length != this.size.box_secret)
 			return Promise.reject(new Error('secret key should be a Buffer of size ' + this.size.box_secret));
 
-		return new Promise(function(success, fail) {
-			sodium.box_key(pk, secret, function (error, key) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(key);
-			});
+		return new Promise(function(success, fail) {
+			let key = sodium.crypto_box_beforenm(pk, secret);
+
+			if(key instanceof Uint8Array && key.length === me.size.box_key)
+				return success(key);
+
+			return fail(new Error('Box key generation failed', key));
 		});
 	}
 
 	zero(secret) {
-		if(!Buffer.isBuffer(secret) || secret.length === 0)
+		if(!secret instanceof Uint8Array || secret.length === 0)
 			return Promise.reject(new Error('secret should be a Buffer of a size greater than 0'));
 
 		return new Promise(function(success) {
-			sodium.zero(secret, success);
+			for(let i = 0; i < secret.length; i++)
+			secret[i] = 0;
+
+			success();
 		});
 	}
 
 	encrypt(key, message) {
-		if(!Buffer.isBuffer(key) || key.length != this.size.box_key)
+		if(!key instanceof Uint8Array || key.length != this.size.box_key)
 			return Promise.reject(new Error('shared key should be a Buffer of size ' + this.size.box_key));
 
-		if(!Buffer.isBuffer(message) || message.length === 0)
+		if(!message instanceof Uint8Array || message.length === 0)
 			return Promise.reject(new Error('message should be a Buffer of size greater than 0'));
 
-		return new Promise(function(success, fail) {
-			sodium.encrypt(key, message, function (error, cipher) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(cipher);
+		return this.random(this.size.box_nonce).then(function (nonce) {
+			return new Promise(function(success, fail) {
+				let cipher = sodium.crypto_box_easy_afternm(message, nonce, key);
+				//cipher = Uint8Array.of(nonce, cipher);
+				let cipher_tmp = new Uint8Array(nonce.length + cipher.length);
+
+				cipher_tmp.set(nonce);
+				cipher_tmp.set(cipher, nonce.length);
+				cipher = cipher_tmp;
+				// REMOVE cipher_tmp when Uint8Array.of is implemented!!!
+
+				if(cipher instanceof Uint8Array && cipher.length === (me.size.box_nonce + message.length + me.size.box_mac))
+					success(cipher);
+
+				return fail(new Error('Box encrypt failed', cipher));
 			});
 		});
 	}
 
 	decrypt(key, cipher) {
-		if(!Buffer.isBuffer(key) || key.length != this.size.box_key)
+		if(!key instanceof Uint8Array || key.length != this.size.box_key)
 			return Promise.reject(new Error('shared key should be a Buffer of size ' + this.size.box_key));
 
-		if(!Buffer.isBuffer(cipher) || cipher.length <= (this.size.box_nonce + this.size.box_mac))
+		if(!cipher instanceof Uint8Array || cipher.length <= (this.size.box_nonce + this.size.box_mac))
 			return Promise.reject(new Error('cipher should be a Buffer of size greater than ' + (this.size.box_nonce + this.size.box_mac)));
 
-		return new Promise(function(success, fail) {
-			sodium.decrypt(key, cipher, function (error, message) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(message);
-			});
+		return new Promise(function(success, fail) {
+			let info = {cipher: cipher.subarray(me.size.box_nonce), nonce: cipher.subarray(0, me.size.box_nonce)};
+			let message = sodium.crypto_box_open_easy_afternm(info.cipher, info.nonce, key);
+
+			if(message instanceof Uint8Array && message.length === (cipher.length - me.size.box_nonce - me.size.box_mac))
+				return success(message);
+
+			return fail('Box decrypt failed', message);
 		});
 	}
 
 	secretbox_key() {
-		return new Promise(function(success) {
-			sodium.secretbox_key(success);
-		});
+		return this.random(this.size.secretbox_key);
 	}
 
 	secretbox_encrypt(key, message) {
-		if(!Buffer.isBuffer(key) || key.length != this.size.secretbox_key)
+		if(!key instanceof Uint8Array || key.length != this.size.secretbox_key)
 			return Promise.reject(new Error('shared key should be a Buffer of size ' + this.size.secretbox_key));
 
-		if(!Buffer.isBuffer(message) || message.length === 0)
+		if(!message instanceof Uint8Array || message.length === 0)
 			return Promise.reject(new Error('message should be a Buffer of size greater than 0'));
 
-		return new Promise(function(success, fail) {
-			sodium.secretbox_encrypt(key, message, function (error, cipher) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(cipher);
+		return this.random(this.size.secretbox_nonce).then(function (nonce) {
+			return new Promise(function(success, fail) {
+				let cipher = sodium.crypto_secretbox_easy(message, nonce, key);
+				//cipher = Uint8Array.of(nonce, cipher);
+				let cipher_tmp = new Uint8Array(nonce.length + cipher.length);
+
+				cipher_tmp.set(nonce);
+				cipher_tmp.set(cipher, nonce.length);
+				cipher = cipher_tmp;
+				// REMOVE cipher_tmp when Uint8Array.of is implemented!!!
+
+				if(cipher instanceof Uint8Array && cipher.length === (me.size.secretbox_nonce + me.size.secretbox_mac + message.length))
+					return success(cipher);
+
+				return fail('Secretbox encrypt failed', cipher);
 			});
 		});
 	}
 
 	secretbox_decrypt(key, cipher) {
-		if(!Buffer.isBuffer(key) || key.length != this.size.secretbox_key)
+		if(!key instanceof Uint8Array || key.length != this.size.secretbox_key)
 			return Promise.reject(new Error('shared key should be a Buffer of size ' + this.size.secretbox_key));
 
-		if(!Buffer.isBuffer(cipher) || cipher.length <= (this.size.secretbox_nonce + this.size.secretbox_mac))
+		if(!cipher instanceof Uint8Array || cipher.length <= (this.size.secretbox_nonce + this.size.secretbox_mac))
 			return Promise.reject(new Error('cipher should be a Buffer of size greater than ' + (this.size.secretbox_nonce + this.size.secretbox_mac)));
 
-		return new Promise(function(success, fail) {
-			sodium.decrypt(key, cipher, function (error, message) {
-				if(error)
-					return fail(error);
+		let me = this;
 
-				success(message);
-			});
+		return new Promise(function(success, fail) {
+			let info = {cipher: cipher.subarray(me.size.secretbox_nonce), nonce: cipher.subarray(0, me.size.secretbox_nonce)};
+			let message = sodium.crypto_secretbox_open_easy(info.cipher, info.nonce, key);
+
+			if(message instanceof Uint8Array && message.length === (cipher.length - me.size.secretbox_nonce - me.size.secretbox_mac))
+				return success(message);
+
+			return fail('Secretbox decrypt failed', message);
 		});
 	}
 }
