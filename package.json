@@ -45,7 +45,7 @@
     "browser"
   ],
   "dependencies": {
-    "libsodium-wrappers": "^0.2.9"
+    "libsodium-wrappers": "^0.2.10"
   },
   "devDependencies": {
     "babel": "^5.8.21",
